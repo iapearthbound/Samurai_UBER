@@ -1,0 +1,76 @@
+ui_print("");ui_print("");ui_print("");ui_print("");ui_print("");
+ui_print("");ui_print("");ui_print("");ui_print("");ui_print("");
+ui_print("------------------------------------------------");
+ui_print("          Independent Android Project           ");
+ui_print("                    Presents                    ");
+ui_print("        ____   __ _  _ _  _ ____    __ _        ");
+ui_print("       |  __| /  | \/ | || |  _ \  /  | |       ");
+ui_print("       |__  |/   |    | || |  _ < /   | |       ");
+ui_print("       |____/_/|_|_||_|____|_| \_/_/|_|_|       ");
+ui_print("           House of The Samurai Kernel          ");
+ui_print("------------------------------------------------");
+show_progress(1.335, 0);
+
+ui_print("Mounting /System...");
+	run_program("/sbin/busybox", "mount", "/system");
+set_progress(0.1);
+
+ui_print("Extracting Files...");
+	package_extract_file("/tools/busybox", "/tmp/busybox");
+	package_extract_file("/tools/flash_image", "/tmp/flash_image");
+	package_extract_file("/tools/erase_image", "/tmp/erase_image");
+	package_extract_file("/tools/bml_over_mtd", "/tmp/bml_over_mtd");
+	package_extract_file("/tools/bml_over_mtd.sh", "/tmp/bml_over_mtd.sh");
+	package_extract_file("/tools/zipalign.sh", "/tmp/zipalign.sh");
+sleep(1);
+set_progress(0.2);
+
+ui_print("Setting Permission...");
+	set_perm(0, 0, 0777, "/tmp/busybox");
+	set_perm(0, 0, 0777, "/tmp/flash_image");
+	set_perm(0, 0, 0777, "/tmp/erase_image");
+	set_perm(0, 0, 0777, "/tmp/bml_over_mtd");
+	set_perm(0, 0, 0777, "/tmp/bml_over_mtd.sh");
+	set_perm(0, 0, 0777, "/tmp/zipalign.sh");
+set_progress(0.3);
+
+ui_print("Flashing image...");
+assert(run_program("/tmp/erase_image", "boot"));
+assert(package_extract_file("boot.img", "/tmp/boot.img"),
+	write_raw_image("/tmp/boot.img", "boot"),
+       	run_program("/tmp/bml_over_mtd.sh", "boot", "72", "reservoir", "4012", "/tmp/boot.img"),
+       	delete("/tmp/boot.img"));
+sleep(1);
+set_progress(0.4);
+
+ui_print("Clearing Cache, Dalvik...");
+assert(delete_recursive("/cache"),
+	delete_recursive("/data/dalvik-cache"));
+set_progress(0.5);
+
+ui_print("Installing Mods...");
+	package_extract_dir("system", "/system");
+sleep(1);
+set_progress(0.6);
+
+ui_print("Installing ZipAlign...");
+	set_perm(0, 2000, 0750, "/system/etc/init.d/93zipalign");
+	set_perm(0, 0, 0755, "/system/xbin/zipalign");
+set_progress(0.7);
+
+ui_print("Running ZipAlign...");
+	run_program("/tmp/zipalign.sh");
+sleep(2);
+set_progress(0.8);
+
+ui_print("Unmounting /system...");
+	run_program("/sbin/busybox", "umount", "/system");
+set_progress(0.9);
+sleep(1);
+
+	ui_print("");
+	ui_print("KERNEL: SAMURAI");
+        ui_print("CODE NAME: MTD.FC09.DAITO");
+        ui_print("COMPILED ON: Sat.May.05.2012.01:31:34.AM");
+	ui_print("CREATED BY: EarthBound.IAP");
+show_progress(0.100000, 0);

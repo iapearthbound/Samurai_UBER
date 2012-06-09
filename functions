@@ -1,0 +1,323 @@
+#!/bin/bash
+#
+# One script to rules them all... ;)
+# Functions to create Samurai Specific Kernels...
+#
+#
+# 2012 EarthBound.IAP
+#
+
+# Text color variables <- Adding some color to this script...
+red=$(tput setaf 1) # RED
+grn=$(tput setaf 2) # Green
+ylw=$(tput setaf 3) # Yellow
+blu=$(tput setaf 4) # Blue
+pur=$(tput setaf 5) # Purple
+cyn=$(tput setaf 6) # Cyan
+wht=$(tput setaf 7) # White
+rst=$(tput sgr0) # Text reset
+bld=$(tput bold) #
+
+function TITLE() 
+{
+	echo -en "\033]2;Samurai_Kernel_Compiler\007"
+}
+
+function VARIABLES()
+{
+  echo $bld$cyn" ______________________________________________________________________________ "
+  echo $bld$cyn"| BUILD INFO                                                                   |"
+  echo $bld$cyn"|------------------------------------------------------------------------------|"
+  echo $bld$grn"| COMPILING: $KBUILD_BUILD_VERSION"
+  echo $bld$grn"| PLATFORM : $BUILD_PLATFORM"
+  echo $bld$grn"| DEFCONFIG: $DEFCONFIG_STRING"
+  echo $bld$grn"| BUILD DIR: $KERNEL_BUILD_DIR"
+  echo $bld$grn"| INITRAMFS: $KERNEL_INITRD"
+  echo $bld$grn"| RECOVERY : $RECOVERY_INITRD"
+  echo $bld$grn"| TOOLCHAIN: $TOOLCHAIN"
+  echo $bld$grn"| THREADS  : $THREADS"
+  echo $bld$cyn"|------------------------------------------------------------------------------|"
+  echo $bld$cyn"|______________________________________________________________________________|"
+}
+
+function MAKE_CLEAN()
+{
+  echo $bld$cyn" ______________________________________________________________________________ "
+  echo $bld$cyn"| Would You Like To Start Fresh & Clean The Kernel...                          |"
+  echo $bld$cyn"|------------------------------------------------------------------------------|"
+  echo $bld$grn"| [Y] Yes <-if you are switching platforms(mtd,bml,cm7,cm9)                    |"
+  echo $bld$red"| [N] NO <-if you have already compiled and just updating                      |"
+  echo $bld$cyn"|------------------------------------------------------------------------------|"
+  echo $bld$grn"| Please Type Your Choice & Press Enter                                        |"
+  echo $bld$cyn"|______________________________________________________________________________|"
+  read -p "  ENTER MENU OPTION : " clean
+  case "$clean" in
+    "Y" | "y" )
+      echo $bld$cyn" ______________________________________________________________________________ "
+      echo $bld$cyn"| CLEANING KERNEL <- Be Patient                                                |"
+      echo $bld$cyn"|------------------------------------------------------------------------------|"$bld$grn
+      pushd $KERNEL_BUILD_DIR > /dev/null
+      echo "  REMOVING: Files"
+      nice make V=1 -j"$THREADS" ARCH=arm clean 2>&1 >make.clean.out
+      popd > /dev/null
+      echo $bld$cyn"|------------------------------------------------------------------------------|"
+      echo $bld$grn"| Directories Cleaned Successfully                                             |"
+      echo $bld$cyn"|______________________________________________________________________________|"$bld$grn
+    ;;
+    "N" | "n" )
+    ;;
+    * )
+      echo $bld$red"**********************You*Have*Entered*An*Incorrect*Option**********************"
+      MAKE_CLEAN
+    ;;
+  esac
+}
+
+BUILD_MODULE()
+{
+  echo $bld$cyn" ______________________________________________________________________________ "
+  echo $bld$cyn"| BUILD_MODULE                                                                 |"
+  echo $bld$cyn"|------------------------------------------------------------------------------|"$bld$grn
+  echo
+  pushd Kernel > /dev/null
+  make ARCH=arm modules
+  popd > /dev/null
+  echo $bld$cyn"|------------------------------------------------------------------------------|"
+  echo $bld$grn"| Modules Built Succesfully                                                    |"
+  echo $bld$cyn"|______________________________________________________________________________|"
+}
+
+CLEAN_ZIMAGE()
+{
+  echo $bld$cyn" ______________________________________________________________________________ "
+  echo $bld$cyn"| Removing old zImage                                                          |"
+  echo $bld$cyn"|------------------------------------------------------------------------------|"$bld$grn
+  echo "  SEARCHING: for zImage"
+  if [ -e $KERNEL_BUILD_DIR/arch/arm/boot/zImage ] ; then
+    rm -f $KERNEL_BUILD_DIR/arch/arm/boot/zImage
+    echo $bld$cyn"|------------------------------------------------------------------------------|"
+    echo $bld$grn"| Old zImage Removed Succesfully                                               |"
+    echo $bld$cyn"|______________________________________________________________________________|"
+  else
+    echo $bld$cyn"|------------------------------------------------------------------------------|"
+    echo $bld$grn"| zImage Does Not Exist <- Do Not Worry                                        |"
+  echo $bld$cyn"|______________________________________________________________________________|"
+  fi
+}	
+
+BUILD_KERNEL()
+{
+  echo $bld$cyn" ______________________________________________________________________________ "
+  echo $bld$cyn"| BUILDING: zImage                                                             |"
+  echo $bld$cyn"|------------------------------------------------------------------------------|"$bld$grn
+  echo
+  pushd $KERNEL_BUILD_DIR > /dev/null
+    export KDIR=`pwd`
+    make ARCH=arm $DEFCONFIG_STRING
+    make -j$THREADS ARCH=arm CROSS_COMPILE=$TOOLCHAIN/$TOOLCHAIN_PREFIX LOCALVERSION=$ZIMAGE_ARG 2>&1 | tee make.out
+  popd > /dev/null
+    if [ -e $KERNEL_BUILD_DIR/arch/arm/boot/zImage ] ; then
+      echo $bld$cyn"|------------------------------------------------------------------------------|"
+      echo $bld$grn"| zImage Built Succesfully                                                     |"
+      echo $bld$cyn"|______________________________________________________________________________|"
+    else
+      echo $bld$cyn"|^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^|"
+      echo $bld$grn"| You have some errors to fix before we can proceed...                         |"
+      echo $bld$cyn"|______________________________________________________________________________|"
+      ./build_kernel.sh
+    fi
+    END_TIME=`date +%s`
+    let "ELAPSED_TIME=$END_TIME-$START_TIME"
+    echo $bld$cyn" ______________________________________________________________________________ "
+    echo $bld$cyn"| COMPILE TIME                                                                 |"
+    echo $bld$cyn"|------------------------------------------------------------------------------|"
+    echo $bld$grn"| Total compile time is: $ELAPSED_TIME seconds"
+    echo $bld$cyn"|------------------------------------------------------------------------------|"
+    echo $bld$cyn"|______________________________________________________________________________|"
+}
+
+function PACKAGE_BOOTIMG()
+{
+  echo $bld$cyn" ______________________________________________________________________________ "
+  echo $bld$cyn"| CREATEING: Boot Image                                                        |"
+  echo $bld$cyn"|------------------------------------------------------------------------------|"$bld$grn
+  echo "  CREATING: ramdisk.img"
+  #/$PWD/mkbootfs $KERNEL_INITRD | /$PWD/minigzip > $BUILD_OUT/ramdisk-kernel.img
+  #Using recovery extracted from boot.img for now...		
+  #echo "create ramdisk-recovery.img"
+  #/$PWD/mkbootfs $RECOVERY_INITRD > ramdisk-recovery.cpio
+  #/$PWD/minigzip < ramdisk-recovery.cpio > RYU/ramdisk-recovery.img
+  if [ -f /$PWD/zipped/boot.img ] ; then
+    echo "  REMOVE: old boot.img"
+    rm -f boot.img
+  fi
+  echo "  CREATING: boot.img"
+  ./mkshbootimg.py $BUILD_OUT/boot.img $KERNEL_BUILD_DIR/arch/arm/boot/zImage $BUILD_OUT/boot.cpio.gz $BUILD_OUT/recovery.cpio.gz
+  echo "  CLEAN: temp files"
+  rm -f ramdisk-kernel.img
+  rm -f ramdisk-recovery.cpio
+  rm -f ramdisk-recovery.img
+    echo $bld$cyn"|------------------------------------------------------------------------------|"
+    echo $bld$grn"| Boot Image Created Succesfully                                               |"
+    echo $bld$cyn"|______________________________________________________________________________|"
+}
+
+function PACKAGE_BOOTIMG_CM9()
+{
+  echo $bld$cyn" ______________________________________________________________________________ "
+  echo $bld$cyn"| CREATEING: Boot Image                                                        |"
+  echo $bld$cyn"|------------------------------------------------------------------------------|"$bld$grn
+  echo "  CREATING: ramdisk.img"
+  #/$PWD/mkbootfs $KERNEL_INITRD | /$PWD/minigzip > $BUILD_OUT/ramdisk-kernel.img
+  #Using recovery extracted from boot.img for now...		
+  #echo "create ramdisk-recovery.img"
+  #/$PWD/mkbootfs $RECOVERY_INITRD > ramdisk-recovery.cpio
+  #/$PWD/minigzip < ramdisk-recovery.cpio > RYU/ramdisk-recovery.img
+  if [ -f /$PWD/zipped/boot.img ] ; then
+    echo "  REMOVE: old boot.img"
+    rm -f boot.img
+  fi
+  echo "  CREATING: boot.img"
+  ./mkshbootimg.py $BUILD_OUT/boot.img $KERNEL_BUILD_DIR/arch/arm/boot/zImage $BUILD_OUT/boot.cpio.gz $BUILD_OUT/recovery.cpio.gz
+  echo "  CLEAN: temp files"
+  rm -f ramdisk-kernel.img
+  rm -f ramdisk-recovery.cpio
+  rm -f ramdisk-recovery.img
+  echo $bld$cyn"|------------------------------------------------------------------------------|"
+  echo $bld$grn"| Boot Image Created Succesfully                                               |"
+  echo $bld$cyn"|______________________________________________________________________________|"
+}
+
+function UPDATE_CWMSCRIPT()
+{
+  echo $bld$cyn" ______________________________________________________________________________ "
+  echo $bld$cyn"| UPDATING: Updater-Script                                                     |"
+  echo $bld$cyn"|------------------------------------------------------------------------------|"$bld$grn
+  pushd $BUILD_OUT > /dev/null
+  echo "  UPDATING: CODE NAME -> '$CODENAME'"
+  sed -i '73 c\        ui_print("CODE NAME: '$BUILD_PLATFORM'.'$CODENAME'");' $UPDATE_SCRIPT/updater-script
+  echo "  UPDATING: COMPILED ON -> '$COMPDATE'"
+  sed -i '74 c\        ui_print("COMPILED ON: '$COMPDATE'");' $UPDATE_SCRIPT/updater-script
+  popd > /dev/null
+  echo $bld$cyn"|------------------------------------------------------------------------------|"
+  echo $bld$grn"| Updater-Script Updated Succesfully                                           |"
+  echo $bld$cyn"|______________________________________________________________________________|"
+}
+
+function PACKAGE_MTD_CWMFLASHABLE()
+{
+  echo $bld$cyn" ______________________________________________________________________________ "
+  echo $bld$cyn"| CREATING: CWM Flashable .zip                                                 |"
+  echo $bld$cyn"|------------------------------------------------------------------------------|"$bld$grn
+  pushd $BUILD_OUT > /dev/null
+    echo "CREATING: Directory"
+    if [ -e /$PWD/$CODENAME ] ; then 
+      echo "  Directory Already Exists"
+    else 
+      mkdir $CODENAME
+      echo "  '$PWD/$CODENAME' Has Been Created"
+    fi
+    echo "CREATING: Zip Package"
+    zip -r $PWD/$CODENAME/$KBUILD_BUILD_VERSION.$BUILD_PLATFORM.$DATE.zip META-INF system tools boot.img
+    if [ -e /$PWD/$CODENAME/$KBUILD_BUILD_VERSION.$BUILD_PLATFORM.$DATE.zip ] ; then
+      echo $bld$cyn"|------------------------------------------------------------------------------|"
+      echo $bld$grn"| CWM Flashable .zip Created Succesfully                                       |"
+      echo $bld$cyn"|______________________________________________________________________________|"
+      echo $bld$cyn" ______________________________________________________________________________ "
+      echo $bld$grn"| CWM Flashable @                                                              |"
+      echo $bld$cyn"|------------------------------------------------------------------------------|"
+      echo $bld$grn"| $BUILD_OUT/$CODENAME/"
+      echo $bld$grn"| $KBUILD_BUILD_VERSION.$BUILD_PLATFORM.$DATE.zip"
+      echo $bld$cyn"|------------------------------------------------------------------------------|"
+      echo $bld$cyn"|______________________________________________________________________________|"
+    else
+      echo $bld$cyn"|^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^|"
+      echo $bld$grn"| Creation of CWM Flashable was Unsuccesfull                                   |"
+      echo $bld$cyn"|______________________________________________________________________________|"
+    fi
+  popd > /dev/null
+}
+
+function PACKAGE_BML_CWMFLASHABLE()
+{
+  echo $bld$cyn" ______________________________________________________________________________ "
+  echo $bld$cyn"| CREATING: CWM Flashable .zip                                                 |"
+  echo $bld$cyn"|------------------------------------------------------------------------------|"$bld$grn
+  pushd $BUILD_OUT > /dev/null
+    echo "CREATING: Directory"
+    if [ -e /$PWD/$CODENAME ] ; then 
+      echo "  Directory Already Exists"
+    else 
+      mkdir $CODENAME
+      echo "  '$PWD/$CODENAME' Has Been Created"
+    fi
+    echo "CREATING: Zip Package"
+    cp $KERNEL_BUILD_DIR/arch/arm/boot/zImage $BUILD_OUT/zImage
+    zip -r $PWD/$CODENAME/$KBUILD_BUILD_VERSION.$BUILD_PLATFORM.$DATE.zip META-INF bmlwrite zImage
+    if [ -e /$PWD/$CODENAME/$KBUILD_BUILD_VERSION.$BUILD_PLATFORM.$DATE.zip ] ; then
+      echo $bld$cyn"|------------------------------------------------------------------------------|"
+      echo $bld$grn"| CWM Flashable .zip Created Succesfully                                       |"
+      echo $bld$cyn"|______________________________________________________________________________|"
+      echo $bld$cyn" ______________________________________________________________________________ "
+      echo $bld$grn"| CWM Flashable @                                                              |"
+      echo $bld$cyn"|------------------------------------------------------------------------------|"
+      echo $bld$grn"| $BUILD_OUT/$CODENAME/"
+      echo $bld$grn"| $KBUILD_BUILD_VERSION.$BUILD_PLATFORM.$DATE.zip"
+      echo $bld$cyn"|------------------------------------------------------------------------------|"
+      echo $bld$cyn"|______________________________________________________________________________|"
+    else
+      echo $bld$cyn"|^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^|"
+      echo $bld$grn"| Creation of CWM Flashable was Unsuccesfull                                   |"
+      echo $bld$cyn"|______________________________________________________________________________|"
+    fi
+  popd > /dev/null
+}
+
+function GIT_HELPER()
+{
+  if [ -e /usr/bin/githelper ] ; then
+    gnome-terminal -e githelper
+    ./build_kernel.sh
+  else
+    echo $bld$cyn" ______________________________________________________________________________ "
+    echo $bld$cyn"| Would You Like To Install Git Helper Or Run From This Directory              |"
+    echo $bld$cyn"|------------------------------------------------------------------------------|"
+    echo $bld$grn"| [Y] Yes <-(run from any terminal directory)                                  |"
+    echo $bld$red"| [N] NO <-(one time run from this particualr terminal directory)              |"
+    echo $bld$cyn"|------------------------------------------------------------------------------|"
+    echo $bld$grn"|     This means that you will not have to cd to the directory where git helper|"
+    echo $bld$grn"| is located and type ./githelper. After installation you can run the command  |"
+    echo $bld$grn"| githelper from any directory in a terminal and it will run...                |"
+    echo $bld$cyn"|______________________________________________________________________________|"$bld$grn
+    read -p "  ENTER MENU OPTION : " install_helper
+    case "$install_helper" in
+      "Y" | "y" )
+        sudo cp $PWD/githelper /usr/bin/
+        gnome-terminal -e githelper
+        echo $bld$cyn" ______________________________________________________________________________ "
+        echo $bld$cyn"|                                                                              |"
+        echo $bld$cyn"|******************************************************************************|"
+	echo $bld$grn"|                       Git Helper Has Been Installed                          |"	
+	echo $bld$grn"|                      You can Now Close This Terminal                         |"
+	echo $bld$grn"|                                    And                                       |"
+	echo $bld$grn"|                   Run Build Kernel From Git Helper Menu                      |"
+        echo $bld$cyn"|******************************************************************************|"
+        echo $bld$cyn"|______________________________________________________________________________|"$bld$grn
+        read -p "Press [Enter] key to continue..."
+        ./build_kernel.sh
+      ;;
+      "N" | "n" )
+        ./githelper
+      ;;
+      * )
+        echo $bld$red"**********************You*Have*Entered*An*Incorrect*Option**********************"
+        GIT_HELPER
+      ;;
+    esac
+  fi
+}
+function INVALID()
+{
+      echo $bld$red"**********************You*Have*Entered*An*Incorrect*Option**********************"
+      ./build_kernel.sh
+}
